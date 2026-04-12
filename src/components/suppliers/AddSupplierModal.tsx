@@ -1,0 +1,407 @@
+import React, { useState, useMemo, useEffect } from "react";
+import type { Supplier, PaymentType } from "../../types";
+import { Card, Button, Input } from "../ui";
+import { X, Calendar, DollarSign, Briefcase, Percent, Layers, Info, Clock } from "lucide-react";
+import { generateInstallments, formatCurrency } from "../../utils/calculations";
+
+interface SupplierModalProps {
+  onClose: () => void;
+  onAdd: (supplier: Supplier) => void;
+  onUpdate?: (id: string, supplier: Supplier) => void;
+  weddingDate: string;
+  editSupplier?: Supplier | null;
+}
+
+export const SupplierModal = ({ onClose, onAdd, onUpdate, weddingDate, editSupplier }: SupplierModalProps) => {
+  const isEditing = !!editSupplier;
+
+  const [formData, setFormData] = useState({
+    fornecedor: "",
+    servico: "",
+    categoria: "Outros",
+    valorTotal: "",
+    tipoPagamento: "parcelado_fixo" as PaymentType,
+    numParcelas: "1",
+    entryPercentage: "30",
+    entryValue: "",
+    entryInInstallments: "1",
+    dataContrato: new Date().toISOString().split("T")[0],
+    finalPaymentDaysBeforeWedding: "15",
+  });
+
+  useEffect(() => {
+    if (editSupplier) {
+      setFormData({
+        fornecedor: editSupplier.fornecedor,
+        servico: editSupplier.servico,
+        categoria: editSupplier.categoria,
+        valorTotal: editSupplier.valorTotal.toString(),
+        tipoPagamento: editSupplier.tipoPagamento,
+        numParcelas: editSupplier.parcelas.length.toString(),
+        entryPercentage: "30",
+        entryValue: "",
+        entryInInstallments: "1",
+        dataContrato: editSupplier.dataContrato,
+        finalPaymentDaysBeforeWedding: "15",
+      });
+    }
+  }, [editSupplier]);
+
+  const categories = [
+    "Assessoria", "Bolo e Doces", "Buffet", "Decoração", "Dia da Noiva", "Dia do Noivo", "Documentação", 
+    "Espaço / Sítio", "Foto & Filmagem", "Iluminação", "Música / DJ", 
+    "Vestuário", "Viagem", "Outros"
+  ].sort((a, b) => a === "Outros" ? 1 : b === "Outros" ? -1 : a.localeCompare(b));
+
+  // Helper to sync % and Value
+  const handleEntryPercentageChange = (value: string) => {
+    const total = parseFloat(formData.valorTotal) || 0;
+    const percentage = parseFloat(value) || 0;
+    
+    // Calculate entry value but don't force too many decimals if not needed
+    const entryVal = (total * percentage) / 100;
+    
+    setFormData(prev => ({
+      ...prev,
+      entryPercentage: value,
+      entryValue: value === "" ? "" : (Math.round(entryVal * 100) / 100).toString()
+    }));
+  };
+
+  const handleEntryValueChange = (value: string) => {
+    const total = parseFloat(formData.valorTotal) || 0;
+    const entryVal = parseFloat(value) || 0;
+    
+    // Calculate percentage with higher precision (2 decimals)
+    const percentage = total > 0 ? (entryVal / total) * 100 : 0;
+    
+    setFormData(prev => ({
+      ...prev,
+      entryValue: value,
+      entryPercentage: value === "" ? "" : (Math.round(percentage * 100) / 100).toString()
+    }));
+  };
+
+  const preview = useMemo(() => {
+    const total = parseFloat(formData.valorTotal) || 0;
+    if (total <= 0) return null;
+
+    if (formData.tipoPagamento === "parcelado_fixo") {
+      const num = parseInt(formData.numParcelas) || 1;
+      return {
+        installments: `${num}x de ${formatCurrency(total / num)}`
+      };
+    }
+
+    if (formData.tipoPagamento === "entrada_parcelas" || formData.tipoPagamento === "entrada_quitacao") {
+      const entryTotal = parseFloat(formData.entryValue) || (total * (parseFloat(formData.entryPercentage) || 0)) / 100;
+      const entryNum = parseInt(formData.entryInInstallments) || 1;
+      const remainingTotal = total - entryTotal;
+      const remainingNum = formData.tipoPagamento === "entrada_parcelas" ? (parseInt(formData.numParcelas) || 1) : 1;
+
+      return {
+        entryTotal: formatCurrency(entryTotal),
+        entryDetails: entryNum > 1 ? `${entryNum}x de ${formatCurrency(entryTotal / entryNum)}` : "À vista",
+        remainingTotal: formatCurrency(remainingTotal),
+        remainingDetails: remainingNum > 1 ? `${remainingNum}x de ${formatCurrency(remainingTotal / remainingNum)}` : "Quitação Final",
+        isMixed: true
+      };
+    }
+
+    return {
+      installments: `Pagamento único de ${formatCurrency(total)}`
+    };
+  }, [formData]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const total = parseFloat(formData.valorTotal);
+    
+    const config: any = {
+      startDate: formData.dataContrato,
+      finalPaymentDaysBeforeWedding: parseInt(formData.finalPaymentDaysBeforeWedding)
+    };
+
+    if (formData.tipoPagamento === "parcelado_fixo") {
+      config.numInstallments = parseInt(formData.numParcelas);
+    } else if (formData.tipoPagamento === "entrada_parcelas" || formData.tipoPagamento === "entrada_quitacao") {
+      config.entryValue = parseFloat(formData.entryValue);
+      config.entryPercentage = parseFloat(formData.entryPercentage);
+      config.entryInInstallments = parseInt(formData.entryInInstallments);
+      config.numInstallments = parseInt(formData.numParcelas);
+    }
+
+    const installments = generateInstallments(weddingDate, total, formData.tipoPagamento, config);
+
+    const supplierData: Supplier = {
+      id: editSupplier?.id || Math.random().toString(36).substr(2, 9),
+      fornecedor: formData.fornecedor,
+      servico: formData.servico,
+      categoria: formData.categoria,
+      valorTotal: total,
+      tipoPagamento: formData.tipoPagamento,
+      dataContrato: formData.dataContrato,
+      parcelas: installments,
+      status: editSupplier?.status || "pendente"
+    };
+
+    if (isEditing && onUpdate) {
+      onUpdate(editSupplier!.id, supplierData);
+    } else {
+      onAdd(supplierData);
+    }
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+      <Card className="w-full max-w-2xl bg-card p-0 overflow-hidden shadow-2xl border-none">
+        <div className="bg-primary p-6 text-white flex justify-between items-center">
+          <div>
+            <h3 className="text-xl font-bold">{isEditing ? "Editar Fornecedor" : "Novo Fornecedor"}</h3>
+            <p className="text-sm text-white/70">{isEditing ? "Atualize os dados do contrato" : "Adicione um novo contrato ao seu casamento"}</p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-full transition-colors">
+            <X size={24} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-8 space-y-6 max-h-[80vh] overflow-y-auto custom-scrollbar">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-muted-foreground">Fornecedor</label>
+              <div className="relative">
+                <Briefcase className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
+                <Input 
+                  required
+                  placeholder="Ex: Fernando Lima" 
+                  className="pl-12 bg-secondary/50 border-none focus:bg-card transition-all"
+                  value={formData.fornecedor}
+                  onChange={e => setFormData({...formData, fornecedor: (e.target as HTMLInputElement).value})}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-muted-foreground">Serviço</label>
+              <Input 
+                required
+                placeholder="Ex: Fotografia" 
+                className="bg-secondary/50 border-none focus:bg-card transition-all"
+                value={formData.servico}
+                onChange={e => setFormData({...formData, servico: (e.target as HTMLInputElement).value})}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-muted-foreground">Categoria</label>
+              <select 
+                className="w-full h-12 px-4 rounded-xl bg-secondary/50 border-2 border-transparent focus:border-primary/30 focus:bg-card focus:outline-none text-sm font-medium transition-all text-foreground"
+                value={formData.categoria}
+                onChange={e => setFormData({...formData, categoria: e.target.value})}
+              >
+                {categories.map(c => <option key={c} value={c} className="bg-card">{c}</option>)}
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-muted-foreground">Data do Contrato</label>
+              <div className="relative">
+                <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
+                <Input 
+                  type="date"
+                  required
+                  className="pl-12 bg-secondary/50 border-none focus:bg-card transition-all"
+                  value={formData.dataContrato}
+                  onChange={e => setFormData({...formData, dataContrato: (e.target as HTMLInputElement).value})}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-muted-foreground">Valor Total (R$)</label>
+              <div className="relative">
+                <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
+                <Input 
+                  type="number"
+                  required
+                  step="0.01"
+                  placeholder="0,00" 
+                  className="pl-12 font-bold bg-secondary/50 border-none focus:bg-card transition-all"
+                  value={formData.valorTotal}
+                  onChange={e => {
+                    const newVal = (e.target as HTMLInputElement).value;
+                    const total = parseFloat(newVal) || 0;
+                    const percentage = parseFloat(formData.entryPercentage) || 0;
+                    const newEntryVal = (total * percentage) / 100;
+                    
+                    setFormData(prev => ({
+                      ...prev, 
+                      valorTotal: newVal,
+                      entryValue: total > 0 && percentage > 0 ? (Math.round(newEntryVal * 100) / 100).toString() : prev.entryValue
+                    }));
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-muted-foreground">Tipo de Pagamento</label>
+              <select 
+                className="w-full h-12 px-4 rounded-xl bg-secondary/50 border-2 border-transparent focus:border-primary/30 focus:bg-card focus:outline-none text-sm font-medium transition-all text-foreground"
+                value={formData.tipoPagamento}
+                onChange={e => setFormData({...formData, tipoPagamento: e.target.value as PaymentType})}
+              >
+                <option value="parcelado_fixo" className="bg-card">Parcelado Fixo</option>
+                <option value="pagamento_unico" className="bg-card">Pagamento Único</option>
+                <option value="entrada_parcelas" className="bg-card">Entrada + Parcelas</option>
+                <option value="entrada_quitacao" className="bg-card">Entrada + Saldo na Quitação</option>
+              </select>
+            </div>
+
+            {/* Quitação target date - Always show */}
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-muted-foreground">Quitação (dias antes do casamento)</label>
+              <div className="relative">
+                <Clock className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
+                <Input 
+                  type="number"
+                  min="0"
+                  max="365"
+                  className="pl-12 bg-secondary/50 border-none focus:bg-card transition-all"
+                  value={formData.finalPaymentDaysBeforeWedding}
+                  onChange={e => setFormData({...formData, finalPaymentDaysBeforeWedding: (e.target as HTMLInputElement).value})}
+                />
+              </div>
+            </div>
+
+            {formData.tipoPagamento === "parcelado_fixo" && (
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-muted-foreground">Número de Parcelas</label>
+                <Input 
+                  type="number"
+                  min="1"
+                  max="48"
+                  className="bg-secondary/50 border-none focus:bg-card transition-all"
+                  value={formData.numParcelas}
+                  onChange={e => setFormData({...formData, numParcelas: (e.target as HTMLInputElement).value})}
+                />
+              </div>
+            )}
+
+            {(formData.tipoPagamento === "entrada_parcelas" || formData.tipoPagamento === "entrada_quitacao") && (
+              <>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-muted-foreground">Valor da Entrada (R$)</label>
+                  <div className="relative">
+                    <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
+                    <Input 
+                      type="number"
+                      step="0.01"
+                      placeholder="Valor fixo"
+                      className="pl-12 bg-secondary/50 border-none focus:bg-card transition-all"
+                      value={formData.entryValue}
+                      onChange={e => handleEntryValueChange((e.target as HTMLInputElement).value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-muted-foreground">Entrada em %</label>
+                  <div className="relative">
+                    <Percent className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
+                    <Input 
+                      type="number"
+                      min="1"
+                      max="99"
+                      step="0.01"
+                      className="pl-12 bg-secondary/50 border-none focus:bg-card transition-all"
+                      value={formData.entryPercentage}
+                      onChange={e => handleEntryPercentageChange((e.target as HTMLInputElement).value)}
+                    />
+                  </div>
+                </div>
+
+                {(formData.tipoPagamento === "entrada_parcelas" || formData.tipoPagamento === "entrada_quitacao") && (
+                   <div className="space-y-2">
+                    <label className="text-sm font-bold text-muted-foreground">Parcelar Entrada em:</label>
+                    <div className="relative">
+                      <Layers className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
+                      <Input 
+                        type="number"
+                        min="1"
+                        max="12"
+                        placeholder="Parcelas da entrada"
+                        className="pl-12 bg-secondary/50 border-none focus:bg-card transition-all"
+                        value={formData.entryInInstallments}
+                        onChange={e => setFormData({...formData, entryInInstallments: (e.target as HTMLInputElement).value})}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {formData.tipoPagamento === "entrada_parcelas" && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-muted-foreground">Parcelas Restantes:</label>
+                    <Input 
+                      type="number"
+                      min="1"
+                      max="48"
+                      className="bg-secondary/50 border-none focus:bg-card transition-all"
+                      value={formData.numParcelas}
+                      onChange={e => setFormData({...formData, numParcelas: (e.target as HTMLInputElement).value})}
+                    />
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Real-time Preview Section */}
+          {preview && (
+            <div className="bg-primary/5 border border-primary/20 rounded-2xl p-6 mt-4 animate-in fade-in slide-in-from-top-2 duration-300">
+              <div className="flex items-center gap-2 mb-4 text-primary">
+                <Info size={18} />
+                <h4 className="font-bold text-sm uppercase tracking-wider">Resumo das Parcelas</h4>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {(formData.tipoPagamento === "entrada_parcelas" || formData.tipoPagamento === "entrada_quitacao") ? (
+                  <>
+                    <div className="p-3 bg-card rounded-xl border border-border">
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Entrada Total</p>
+                      <p className="text-lg font-black text-foreground">{preview.entryTotal}</p>
+                      <p className="text-xs font-semibold text-primary">{preview.entryDetails}</p>
+                    </div>
+                    <div className="p-3 bg-card rounded-xl border border-border">
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Saldo Restante</p>
+                      <p className="text-lg font-black text-foreground">{preview.remainingTotal}</p>
+                      <p className="text-xs font-semibold text-primary">{preview.remainingDetails}</p>
+                    </div>
+                  </>
+                ) : (
+                  <div className="sm:col-span-2 p-3 bg-card rounded-xl border border-border">
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Plano de Pagamento</p>
+                    <p className="text-xl font-black text-foreground">{preview.installments}</p>
+                  </div>
+                )}
+              </div>
+              {isEditing && (
+                 <p className="text-[10px] text-amber-500 font-bold mt-4 uppercase">* Editar o plano de pagamento irá regenerar as parcelas e resetar os status de pagamento deste fornecedor.</p>
+              )}
+            </div>
+          )}
+
+          <div className="flex gap-4 pt-4 border-t border-border">
+            <Button type="button" variant="outline" className="flex-1 h-14" onClick={onClose}>
+              Cancelar
+            </Button>
+            <Button type="submit" className="flex-[2] h-14 text-lg shadow-lg shadow-primary/20">
+              {isEditing ? "Salvar Alterações" : "Cadastrar Fornecedor"}
+            </Button>
+          </div>
+        </form>
+      </Card>
+    </div>
+  );
+};
