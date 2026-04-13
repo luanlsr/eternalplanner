@@ -59,7 +59,7 @@ export const Dashboard = ({ stats, onAction }: DashboardProps) => {
                 <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} stroke="currentColor" className="text-muted-foreground" />
                 <YAxis fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `R$${v/1000}k`} stroke="currentColor" className="text-muted-foreground" />
                 <Tooltip 
-                  formatter={(v: number) => formatCurrency(v)}
+                  formatter={(v: any) => formatCurrency(Number(v))}
                   contentStyle={{ 
                     borderRadius: '16px', 
                     border: 'none', 
@@ -96,7 +96,7 @@ export const Dashboard = ({ stats, onAction }: DashboardProps) => {
                   ))}
                 </Pie>
                 <Tooltip 
-                  formatter={(v: number) => formatCurrency(v)}
+                  formatter={(v: any) => formatCurrency(Number(v))}
                   contentStyle={{ backgroundColor: 'hsl(var(--card))', color: 'hsl(var(--card-foreground))', border: 'none', borderRadius: '12px' }}
                 />
               </PieChart>

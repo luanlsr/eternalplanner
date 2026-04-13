@@ -1,13 +1,13 @@
-import React, { useState, useMemo } from "react";
-import { Card, Button, Input, Badge } from "../ui";
+import { useState, useMemo } from "react";
+import { Button, Badge } from "../ui";
 import { formatCurrency, formatDate } from "../../utils/calculations";
 import { 
   Search, Plus, ChevronRight, Briefcase, ArrowUpDown, 
-  ChevronDown, Move, Filter, ArrowUp, ArrowDown, 
+  ChevronDown, Filter, ArrowUp, ArrowDown, 
   DollarSign as DollarIcon, Calendar, CheckCircle2, 
-  Clock, AlertCircle, GripVertical
+  AlertCircle, GripVertical
 } from "lucide-react";
-import type { PaymentStatus, Supplier } from "../../types";
+import type { Supplier } from "../../types";
 import { Reorder, useDragControls, motion, AnimatePresence } from "framer-motion";
 
 interface SuppliersListProps {
@@ -332,7 +332,7 @@ const ReorderItem = ({ supplier, onSelect, isManual }: any) => {
 
                         <div className="flex items-center justify-end gap-1.5 pr-1">
                             <div className="flex -space-x-1.5 overflow-hidden">
-                                {supplier.parcelas.map((p, i) => (
+                                {supplier.parcelas.map((p: any, i: number) => (
                                     <div 
                                         key={i} 
                                         className={cn(
@@ -365,20 +365,6 @@ const ReorderItem = ({ supplier, onSelect, isManual }: any) => {
     );
 };
 
-// Custom icons
-const DollarSign = ({ size, className }: any) => (
-    <svg 
-        xmlns="http://www.w3.org/2000/svg" 
-        width={size} height={size} 
-        viewBox="0 0 24 24" fill="none" 
-        stroke="currentColor" strokeWidth="2.5" 
-        strokeLinecap="round" strokeLinejoin="round" 
-        className={className}
-    >
-        <line x1="12" y1="1" x2="12" y2="23"></line>
-        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-    </svg>
-);
 
 function cn(...inputs: any[]) {
     return inputs.filter(Boolean).join(" ");

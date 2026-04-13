@@ -71,7 +71,7 @@ export const generateInstallments = (
   const installments: Installment[] = [];
   const weddingDt = parseISO(weddingDate);
 
-  const calculateLastDate = (defaultDate: string) => {
+  const calculateLastDate = () => {
     // If we have a wedding date, the final payment date is ALWAYS relative to it.
     // If no specific quitação prazo is set, default to 15 days before.
     const days = config.finalPaymentDaysBeforeWedding !== undefined 
@@ -88,7 +88,7 @@ export const generateInstallments = (
 
     for (let i = 1; i <= num; i++) {
         const defaultDate = format(addDays(startDate, (i - 1) * 30), "yyyy-MM-dd");
-        const date = i === num ? calculateLastDate(defaultDate) : defaultDate;
+        const date = i === num ? calculateLastDate() : defaultDate;
         
         installments.push({
             id: Math.random().toString(36).substr(2, 9),
@@ -99,12 +99,11 @@ export const generateInstallments = (
         });
     }
   } else if (type === "pagamento_unico") {
-    const defaultDate = config.dueDate || format(subDays(weddingDt, 10), "yyyy-MM-dd");
     installments.push({
       id: Math.random().toString(36).substr(2, 9),
       numero: 1,
       valor: totalValue,
-      dataVencimento: calculateLastDate(defaultDate),
+      dataVencimento: calculateLastDate(),
       status: "pendente"
     });
   } else if (type === "entrada_quitacao") {
@@ -130,7 +129,7 @@ export const generateInstallments = (
         id: Math.random().toString(36).substr(2, 9),
         numero: entryInInstallments + 1,
         valor: remainingValue,
-        dataVencimento: calculateLastDate(""), // Forced to target date
+        dataVencimento: calculateLastDate(), // Forced to target date
         status: "pendente"
     });
   } else if (type === "entrada_parcelas") {
@@ -157,7 +156,7 @@ export const generateInstallments = (
     const lastEntryDate = addDays(startDate, (entryInInstallments - 1) * 30);
     for (let i = 1; i <= numInstallments; i++) {
         const defaultDate = format(addDays(lastEntryDate, i * 30), "yyyy-MM-dd");
-        const date = i === numInstallments ? calculateLastDate(defaultDate) : defaultDate;
+        const date = i === numInstallments ? calculateLastDate() : defaultDate;
 
         installments.push({
             id: Math.random().toString(36).substr(2, 9),
